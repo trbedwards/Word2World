@@ -1,4 +1,4 @@
 .env
-
-outputs
-__pycache__
+outputs/
+__pycache__/
+*.pyc
