@@ -29,9 +29,10 @@ import time
 import imageio
 import pandas as pd
 from PIL import Image
-import openai
 import traceback
 import os
+from .llm_cli import cli_chat as openai
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 cfg = Config()

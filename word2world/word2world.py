@@ -1,7 +1,12 @@
 import os
 import json
-from dotenv import load_dotenv
 #from .configs import Config
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv():
+        return False
 
 class Word2World:
     def __init__(self):
@@ -19,20 +24,11 @@ class Word2World:
 
         load_dotenv()
 
-        if "gpt" in cfg.model: 
-            import openai
-
-        else:
-            raise NotImplementedError("Model not implemented yet!")
-        
-        
-
         if not os.path.exists(cfg.save_dir):
             os.makedirs(cfg.save_dir)
 
-        if "gpt" in cfg.model: 
-            from .generators import OpenAIGenerator
-            generator = OpenAIGenerator(self.total_input_tokens, self.total_output_tokens)
+        from .generators import OpenAIGenerator
+        generator = OpenAIGenerator(self.total_input_tokens, self.total_output_tokens)
         
         
         story, story_prompt = generator.create_story(cfg.story_paragraphs, cfg.total_objectives)
@@ -118,15 +114,11 @@ class Word2World:
             with open(cfg.save_dir +f"/data_gen_{cfg.experiment_name}.json", 'w') as f:
                 json.dump(self.worlds_history, f)
 
-            spent_this_gen = (sum(self.total_input_tokens)/1000)*0.01 + (sum(self.total_output_tokens)/1000)*0.03 
-            self.total_spent += spent_this_gen
-            print(f"$ spent on this gen = {spent_this_gen}")
-            print(f"Total spent = {self.total_spent}")
+            print(f"Reported input tokens = {sum(self.total_input_tokens)}")
+            print(f"Reported output tokens = {sum(self.total_output_tokens)}")
 
 
        
-
-
 
 
 

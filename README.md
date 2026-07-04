@@ -18,16 +18,19 @@ Install the environment and activate it:
 
 ```
 cd Word2World
-type > word2world/.env
 conda env create -f environment.yml
 conda activate word2world
 ```
 
-Add your API key to the .env file created in word2world folder:
+Install and authenticate the model CLI you want to use:
 
 ```
-OPENAI_API_KEY="sk..."
+codex login
+claude auth login
 ```
+
+Word2World calls the CLIs in non-interactive mode, so it uses your existing
+Codex CLI or Claude Code login instead of project API keys.
 
 Run with default configs:
 
@@ -37,7 +40,7 @@ Or run with specified configs:
 
 ```
 python main.py \
---model="gpt-4-turbo-2024-04-09" \
+--model="codex" \
 --min_story_paragraphs=4 \
 --max_story_paragraphs=5 \
 --total_objectives=8 \
@@ -45,6 +48,17 @@ python main.py \
 --experiment_name="Your_World" \
 --save_dir="outputs"
 ```
+
+Model selectors:
+
+- `codex` uses the default Codex CLI model.
+- `codex:<model>` uses Codex CLI with a specific model.
+- `claude` uses the default Claude Code model.
+- `claude:<model>` uses Claude Code with a specific model or alias, such as `claude:sonnet`.
+
+The CLI command names can be overridden with `WORD2WORLD_CODEX_COMMAND` and
+`WORD2WORLD_CLAUDE_COMMAND`. The per-call timeout defaults to 300 seconds and
+can be changed with `WORD2WORLD_CLI_TIMEOUT_SECONDS`.
 
 To play the generated game:
 
@@ -78,15 +92,14 @@ python word2world/play_game.py
 
 ### Note:
 
-- The most stable model is `"gpt-4-turbo-2024-04-09"`.
-- Currently only `OpenAI` models are supported.
-- OS supported: `Windows`
+- Codex CLI and Claude Code are supported through local CLI authentication.
+- OS supported: `Windows` and `Linux`
 
 ### To-dos:
 
-- [ ] Add support for Anthropic.
+- [x] Add support for Anthropic.
 - [ ] Add support for Groq.
-- [ ] Add support for Linux.
+- [x] Add support for Linux.
 - [ ] Clean Code for easy integrations of new platforms, e.g. huggingface.
 
 ### Cite:
@@ -98,4 +111,3 @@ python word2world/play_game.py
   year={2024}
 }
 ```
-
