@@ -495,7 +495,10 @@ class OpenAIGenerator(Generator):
                 objective_tile_list = []
                 for _keys, str_obj in objective_tile_dict.items():
                     temp_list = extract_list(str(str_obj))
-                    objective_tile_list.append((temp_list[1], temp_list[2]))
+                    # Objectives arrive as ['tile', row, col]; the solver works
+                    # in (x, y) = (col, row) coordinates.
+                    if len(temp_list) >= 3:
+                        objective_tile_list.append((temp_list[2], temp_list[1]))
                 
                 solving = False
                 solving_exceptions = 0

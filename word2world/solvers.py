@@ -593,7 +593,12 @@ class WorldState:
         self.width = max(len(line) for line in lines)
 
         for coords in objective_coordinates:
-            self.targets.append({"x": coords[1], "y": coords[2]})
+            if len(coords) >= 3:
+                # ('tile', x, y) triples
+                self.targets.append({"x": coords[1], "y": coords[2]})
+            else:
+                # (x, y) pairs
+                self.targets.append({"x": coords[0], "y": coords[1]})
 
         for y, line in enumerate(lines):
             self.solid.append([])
