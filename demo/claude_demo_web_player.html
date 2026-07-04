@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>The Lantern of Emberholt</title>
+<style>
+  :root { --panel: #16161f; --ink: #e8e6df; --dim: #8a8878; --gold: #e3b341; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #0b0b10; color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif; overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100%; max-width: 900px; margin: 0 auto; }
+  header { padding: 10px 14px 6px; text-align: center; }
+  header h1 { font-size: 1.05rem; letter-spacing: .04em; color: var(--gold); font-weight: normal; }
+  header p { font-size: .72rem; color: var(--dim); margin-top: 2px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  #stage { position: relative; flex: 1; min-height: 0; display: flex;
+    align-items: center; justify-content: center; padding: 6px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges;
+    background: #000; border: 1px solid #2a2a35; border-radius: 4px;
+    max-width: 100%; max-height: 100%; touch-action: none; }
+  #hud { display: flex; gap: 8px; align-items: center; padding: 4px 14px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .74rem; color: var(--dim);
+    flex-wrap: wrap; justify-content: center; }
+  #hud b { color: var(--ink); font-weight: normal; }
+  #inventory { display: flex; gap: 4px; }
+  #inventory img { width: 20px; height: 20px; image-rendering: pixelated;
+    border: 1px solid #2a2a35; border-radius: 3px; background: #000; }
+  #msg { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    background: rgba(10,10,16,.92); border: 1px solid #3a3a48; border-radius: 6px;
+    padding: 8px 14px; font-size: .8rem; max-width: 86%; text-align: center;
+    opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #msg.show { opacity: 1; }
+  /* story overlay */
+  #story { position: absolute; inset: 0; background: rgba(8,8,12,.96); z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; text-align: center; }
+  #story .scroll { max-width: 620px; max-height: 60vh; overflow-y: auto;
+    font-size: .88rem; line-height: 1.55; color: var(--ink); text-align: left;
+    white-space: pre-wrap; padding: 0 6px; }
+  #story h2 { color: var(--gold); font-weight: normal; margin-bottom: 12px; font-size: 1.15rem; }
+  #story button, #end button { margin-top: 18px; background: var(--gold); color: #14110a;
+    border: 0; border-radius: 6px; padding: 10px 26px; font-size: .9rem;
+    font-family: inherit; cursor: pointer; }
+  #end { position: absolute; inset: 0; background: rgba(8,8,12,.94); z-index: 20;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; text-align: center; }
+  #end h2 { color: var(--gold); font-weight: normal; font-size: 1.4rem; }
+  #end p { color: var(--dim); margin-top: 8px; font-size: .85rem; max-width: 480px; }
+  /* objectives drawer */
+  #quests { position: absolute; top: 8px; right: 8px; z-index: 10;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .68rem; }
+  #quests details { background: rgba(10,10,16,.9); border: 1px solid #2a2a35;
+    border-radius: 6px; padding: 6px 8px; max-width: 240px; }
+  #quests summary { cursor: pointer; color: var(--gold); }
+  #quests li { margin: 5px 0 0 14px; color: var(--dim); }
+  #quests li.done { color: #6fbf73; text-decoration: line-through; }
+  /* touch controls */
+  #touch { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 15; }
+  #touch .pad { position: absolute; left: 12px; bottom: 12px; width: 132px; height: 132px; }
+  #touch .pad button { position: absolute; width: 44px; height: 44px; pointer-events: auto;
+    background: rgba(40,40,55,.75); color: var(--ink); border: 1px solid #3a3a48;
+    border-radius: 8px; font-size: 18px; }
+  #touch .actions { position: absolute; right: 12px; bottom: 24px; display: flex; gap: 10px; }
+  #touch .actions button { pointer-events: auto; width: 54px; height: 54px; border-radius: 50%;
+    background: rgba(60,50,25,.8); color: var(--gold); border: 1px solid #5a4a20; font-size: 11px;
+    font-family: ui-monospace, monospace; }
+  @media (pointer: coarse) { #touch { display: block; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>The Lantern of Emberholt</h1>
+    <p>arrows / WASD move &middot; Z shoot &middot; SPACE strike &middot; walk into items to collect</p>
+  </header>
+  <div id="stage">
+    <canvas id="game"></canvas>
+    <div id="quests"></div>
+    <div id="msg"></div>
+    <div id="touch">
+      <div class="pad">
+        <button data-dir="up"    style="left:44px; top:0">&#9650;</button>
+        <button data-dir="left"  style="left:0;   top:44px">&#9664;</button>
+        <button data-dir="right" style="left:88px;top:44px">&#9654;</button>
+        <button data-dir="down"  style="left:44px;top:88px">&#9660;</button>
+      </div>
+      <div class="actions">
+        <button data-act="shoot">SHOOT</button>
+        <button data-act="strike">STRIKE</button>
+      </div>
+    </div>
+    <div id="story">
+      <h2>The Lantern of Emberholt</h2>
+      <div class="scroll" id="storyText"></div>
+      <button id="startBtn">Begin the Quest</button>
+    </div>
+    <div id="end">
+      <h2 id="endTitle"></h2>
+      <p id="endText"></p>
+      <button onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+  <div id="hud">
+    <span>Score <b id="score">0</b></span>
+    <span>Items <b id="itemCount">0</b></span>
+    <span id="inventory"></span>
+  </div>
+</div>
+<script>
+const GAME = {"title": "The Lantern of Emberholt", "story": "# The Lantern of Emberholt\n\nIn the misty highlands of Emberholt, where jagged cliffs overlooked a valley perpetually shrouded in violet fog, the village of Thornwick clung to survival beneath the shadow of Mount Cinderpeak. The mountain's caldera glowed at night with an eerie red light, and the villagers whispered that something ancient stirred within it. Kael Ashborn, a young blacksmith's apprentice with soot-stained hands and a stubborn heart, had grown up hearing these stories from his grandmother, who once served as Keeper of the Lantern\u2014an artifact said to hold back the darkness that slept in the mountain's heart. When she fell ill and the protective wards around Thornwick began to flicker and fail, Kael knew the burden had fallen to him.\n\nThe source of the village's suffering was Malgrith the Hollow King, a sorcerer who had once been human but sacrificed his body to the mountain's dark spirit centuries ago in exchange for power. Now a wraith of smoke and iron armor, Malgrith commanded legions of ash-wolves and stone golems from his throne deep within Cinderpeak's caverns. He sought to shatter the Lantern of Emberholt forever, plunging the valley into eternal night so he could remake it in his own image\u2014a kingdom of ash where no living thing would challenge him again. Malgrith had already sent scouts to Thornwick, and it was only a matter of time before he moved against the village directly.\n\nTo save his home, Kael would need to journey from the misty highlands into the mountain's molten depths, facing trials that tested both his courage and his ingenuity. He set out first to **speak with his grandmother** and learn the Lantern's history before her memory faded entirely, then traveled through the **Whispering Reeds**, a marshland of glowing fungi and sunken statues, to **recover the Emberstone shard** rumored to relight the Lantern's flame. From there, he needed to **cross the Bridge of Bones** spanning a chasm guarded by a territorial rock wyrm, then venture into the **Sunless Archive**, a buried library of a forgotten civilization, to **decipher the ritual** that could seal Malgrith away permanently.\n\nDeeper into the mountain, past rivers of glowing magma and caverns lined with crystal formations that hummed with residual magic, Kael would have to **rescue the captured Keeper-scouts** held prisoner in Malgrith's iron cages, then **forge a weapon** from Emberstone and starlight steel capable of harming a being no longer bound by flesh. With allies freed and his weapon complete, he needed to **gather the three Watchflames** scattered across the mountain's ledges, each one a fragment of protective magic left behind by ancient Keepers before him.\n\nAt last, standing before the Hollow King's throne of smoldering iron amid the mountain's beating heart, Kael would face his final and most dangerous objective: to **defeat Malgrith the Hollow King** using the Lantern's restored light and the Watchflames' combined power, banishing the wraith-sorcerer back into the ash from which he'd emerged and freeing Emberholt from its centuries-long curse.", "goals": "**Main Goal:**\nRestore the Lantern of Emberholt and defeat Malgrith the Hollow King to save Thornwick and the Emberholt valley from eternal darkness.\n\n**Small Goals (Objectives):**\n1. Speak with Grandmother to learn the Lantern's history\n2. Recover the Emberstone shard in the Whispering Reeds\n3. Cross the Bridge of Bones (defeat/evade the rock wyrm)\n4. Decipher the ritual in the Sunless Archive\n5. Rescue the captured Keeper-scouts\n6. Forge the Emberstone-and-starlight weapon\n7. Gather the three Watchflames\n8. Defeat Malgrith the Hollow King\n\n**Rewards and Penalties**\n\n| # | Objective | Reward (Score) | Penalty (Score) |\n|---|-----------|----------------|------------------|\n| 1 | Speak with Grandmother | Lantern Lore Unlocked (+10) | Leave without full story, must return later (-5) |\n| 2 | Recover Emberstone Shard | Shard Obtained (+20) | Shard damaged/lost in marsh hazard (-10) |\n| 3 | Cross Bridge of Bones | Safe Crossing / Wyrm Subdued (+25) | Fall damage or forced retreat (-15) |\n| 4 | Decipher Archive Ritual | Ritual Knowledge Gained (+20) | Wrong translation, triggers trap (-10) |\n| 5 | Rescue Keeper-Scouts | All Scouts Freed (+30); Partial rescue (+15) | Scout(s) left behind/captured permanently (-20) |\n| 6 | Forge the Weapon | Weapon Successfully Forged (+25) | Forge failure, resources wasted, must re-gather materials (-15) |\n| 7 | Gather 3 Watchflames | All 3 Collected (+30); per Watchflame (+10 each) | Watchflame lost/destroyed by enemy (-10 each) |\n| 8 | Defeat Malgrith | Victory, Emberholt Saved (+100) | Defeat/death, must retry final battle (-50) |\n\n**Bonus Modifiers**\n- No damage taken during Bridge of Bones crossing: +10\n- All Ash-Wolves/Golems avoided or defeated en route without losses: +10\n- Completing all objectives before facing Malgrith (full preparation): +15 bonus before final battle\n\n**Maximum Possible Score:** 260 (base objectives) + up to 35 (bonus modifiers) = **295 points**", "objectives": [{"name": "Speak with Grandmother", "tile": "$", "row": 2, "col": 8}, {"name": "Recover the Emberstone Shard", "tile": "U", "row": 3, "col": 7}, {"name": "Cross the Bridge of Bones", "tile": "n", "row": 7, "col": 15}, {"name": "Decipher the Ritual", "tile": "K", "row": 10, "col": 9}, {"name": "Rescue the Keeper-Scouts", "tile": "M", "row": 12, "col": 7}, {"name": "Forge the Weapon", "tile": "N", "row": 12, "col": 21}, {"name": "Gather the Watchflames", "tile": "O", "row": 13, "col": 16}, {"name": "Defeat Malgrith the Hollow King", "tile": "#", "row": 17, "col": 14}], "grid": ["deaaZaaeaadaaZaaeaadaaZaaeaade", "aaDDADD@bbbbCbbbbBbbDDADDaaFaa", "aZacccaZ$YacccaZaacccaZaeebbbb", "kkiipk%UkiipkkjjkpiikkVkiipkki", "kjjkpiikllkpiikjjkpiikllkpiikj", "kkipkkmmkkipkkmmkkipkkmmkkipkm", "mmmzmmnnnnnnnnnnnnnnnnnnnnzmmm", "QmmPnnnnnnnnnnPnnnnnnnnnnPnnmQ", "mmzzmmnnnnnnnnnnnnnnnnnnnnmzzm", "rrIfffIfffIfffIfffIfffIfffIfff", "ffHHffHHfKffLffJJffHHffHHfffff", "rrIfffIfffIfffIfffIfffIfffqfrr", "gghht*gMg&hhtggghhtggNgghhtggg", "sstugghhsstugghhOgghhtussgghht", "vhhttgvhhttgvhhttgvhhttgvhhttg", "yywwxxwwxxwwxxwwxxwwxxwwxxwwxx", "xxTxxwwxxSSSSSSxxwwxxTxxXwwxxX", "wwTwwxxwwTwwwR#wwTwwxxwwTwwwww"], "gridBase": ["deaaZaaeaadaaZaaeaadaaZaaeaade", "aaDDADDabbbbCbbbbBbbDDADDaaFaa", "aZacccaZaYacccaZaacccaZaeebbbb", "kkiipkkUkiipkkjjkpiikkVkiipkki", "kjjkpiikllkpiikjjkpiikllkpiikj", "kkipkkmmkkipkkmmkkipkkmmkkipkm", "mmmzmmnnnnnnnnnnnnnnnnnnnnzmmm", "QmmPnnnnnnnnnnPnnnnnnnnnnPnnmQ", "mmzzmmnnnnnnnnnnnnnnnnnnnnmzzm", "rrIfffIfffIfffIfffIfffIfffIfff", "ffHHffHHfKffLffJJffHHffHHfffff", "rrIfffIfffIfffIfffIfffIfffqfrr", "gghhtggMgghhtggghhtggNgghhtggg", "sstugghhsstugghhOgghhtussgghht", "vhhttgvhhttgvhhttgvhhttgvhhttg", "yywwxxwwxxwwxxwwxxwwxxwwxxwwxx", "xxTxxwwxxSSSSSSxxwwxxTxxXwwxxX", "wwTwwxxwwTwwwRwwwTwwxxwwTwwwww"], "tiles": {"@": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA6klEQVR4nM1RMQrCQBCcExu/IFaxEbSxsfID/kCIZaysbSWt+AXTJW+Q9FaxtRBECxEtrAJCyrFK3LvkRLBx4GB3uBnm5hRJ/ILaT+q/MADJ4kg8ln1rOZrGZvDJ5CuDx7JP3hJKkyAIaBpUdhB6DuNjCgCIjylCz7H/dVWC7DJjdpkx9Bzmsy1BycAUyp23hKHnUGqU9vb7jtFiDABYXXsFPW/ti3myPmsarQPVHKh8bj5PxZFiswLNLZq2CQDRoQG3k715sZsJSh2Mht3KxiUvNXXzotvJsNnCt/AlaHGUUgDKYgE/T5DjBY9O7UDqT6sCAAAAAElFTkSuQmCC", "#": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABaklEQVR4nIWToW/CQBTGf12QFYiSnCgJgiWQjGRNMBWIE8gJxMQEZn/ABH4TyImRICeQiJmJ/QFIxESXVLAEQwKiSREViAqSm1iuo6VdP3PJe/d973vv3UEBLNNWlmmrorzGRRHZbg1whKBMJFegDP1mV/WbXZUrYJm2coQAIKy6Zy76za56uYuR7SOWaSsjS/6vsiMEsn3k9rlDPPeQkyjtYH/YGY4QjKTFSFoAybk/7AyAm+sj8dzj46tS3N96NVTr1VBZpq38t9dkG3oz/uNVEkvJ6GA896DzwGLWA3+a5JafktjvIe/HiaPKKdkRAi8IkBOAcap3LwiI/T9BDUOTF7Mn8KfISYTdGqQu1aIlAF4QpOYBmTVqcr22oV7blJJTDk6t6negoWN5IpXTh5O9mJ2BIwRh1YXvd3U2xLDq4rDMreIFKLfnsA0bZFHZH3aGF6Dcyw1xRG6fANuwQS36LZCXL/2+RfkfYTS3Z6Kno04AAAAASUVORK5CYII=", "$": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABs0lEQVR4nKWTIYvjQBTHfzkqIip6UBHRioOIiitsIBUjVlSMWNEPsOIWWri4i+hHOBGxYkVkFnZl4PYjRFSsiKiI6MEdrFm4wkUULqJiRGFOLMluyHDmHjx48+a9P+/9/zPwn2aZktL1dR0XZQnA4bg31naS0vX12WKKEtsmZ+cz7m8zI8g7U/OVEIRTj4AQACW2LD9Lhv2R/icAwNX3kmV2zXpdscyuCW7HDYjJOgAAQtpEywVC2q01TNbaSbq+nkTKWJiuKjzHoSjLFhfNBPV+a/nA8/2HxtfyATuf4TkOk0h1uLDeAniOw595hZA2ASEJMXmmeE4Vl3cDwqlHvCtaqjQA0vV1UZZ4jgO86g9weTcgz1QLOF1VHI57q1c330QB89VXJpEiIMSePqJ25yTE2PmM95sdaVry00mAV3J7dZAQN2wnIoYdwMu4m+Mjp8EFHjk3UUBCTLEycCDOPUTvV4Oen8bNOT+NUU+/mUTK/DKl6+unH5+0dH29kxc6WpzpYX+kh/2R/vLtYxPX3pERQMw2Hf0Px72Vriry7fyFzO28dW/8TG9VOBz3lukP1OP/Bc2hw+NCUdLQAAAAAElFTkSuQmCC", "%": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAh0lEQVR4nO1TwQmAMAy8iA//jqDgODqKbuAGruI6BVfo39/5iqTWquDHhwdHyZEcl0CFJN4gezX9G3zEILfF0NUAQABiZK0JQKZ5uUxwHLb6KVIr0BDOF6n5yECjBmjK9bFBEs4Xp+ZXNxBDTRHfh+TOvq0IYNTXUjXbTxJiv7OIjHerkAx6NlQgO6fD2LgWAAAAAElFTkSuQmCC", "&": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABtklEQVR4nI2TvWvbUBTFfw4eNGjI4EEFZ3OhAQv6QB40aNCg0UMHDxZ0KXQppFAPHQrxkD9AhQxZCh3dwUMHjxk0aNBggwKvYIMDXQIR1JAOHjQEXodGimS5H2d57x24555777sNduB1LLXLJWnKZnvT2OVr8DqWOonm6vvdUrX0tpKnXbVevlTytKtaersmDHCwS4y6OsG3LQCaL8gmCZovCN8dsk+kWX5cXi8avSNPAcRzF4DZVZOB//vch1pdXsdSPw5tblZfAWg/e1HcgVovaiXkiOdu4SL8PMZ2xP87CIYZmG8fSXmO+/Hn3knUiJbeVsIwcI/vCy4IN8RzF7sX1kQqnfE6lkrSlNbwEwM/ACCTDvJ5DwhyEVUWOSgHX8yOATjzA6ahxzT00MyoSDB9LxGGUXFccZBJBwgZT0aP5U9MAN70l1zMTPrSwX2VFi4KgcvrRWP0AWU7AvOJ5G4dslptsPsDAMI8gTz/cxPLe5CkKQC2I9CtM7aLMXGUANW/0CwHB8OM2VWT+P4IHhYojlBi/bpI8tcpjL5oD7fbghOGQS6sPRXEEZUp/HNF89GWURb4BV6SwG1rMVpkAAAAAElFTkSuQmCC", "*": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAsUlEQVR4nM2Tuw0CMRBEZy87WW6BBojICUipwyFN0Mg2Rwunk8MhwZY/a58QCSM58Gfe7o5kIYmfRDKvVqvzBABVpap2D0hCSqOIdGYAiPsmCQQAIQRJgGEHq/OMrwdLUFICDQGr82yXBTEBlrmF3K/n3EGXgVWtVcqEJJZu7s+lZYr7JrfLqTpfRo9n+0plBmX7s9lLb9VBqtTmMMvFHOEb/SFgNO/o3PpMz4Oi+Z4k3rQGnJMPfJwRAAAAAElFTkSuQmCC", "a": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVR4nGO0jlH/z0ABYKJE86gBowaMGjCYDAAAT+UB3Ud6P98AAAAASUVORK5CYII=", "b": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAASElEQVR4nGM0UJX7z0ABYKJE8xA0gFeYgzIDPr/9QZkB2MBwNABbSBNtAK8wB8Pntz9IMgTFAJhmbNGFy4UYXsCnGZv8wMcCAD/lE5KEYwnsAAAAAElFTkSuQmCC", "c": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAjElEQVR4nI1SOQ7AMAijqKPfk/8/Kns7UYHLEZZEkcHY8bXWegDI3lumAiAiErBqj3ZOzXxXm+anAhgHfgOy5uzuMUHCCYvXzl4pr8xMk0eareyZ+GR/SgnZVhmZZuZURqYSeOWuMrLPxA7Ico6SaMBJzi+JJyn0mJDE6ktZjsfcLZVrrCrkoMp7h3kBu6x0CyrC2soAAAAASUVORK5CYII=", "d": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVR4nGNcfE79PwMFgIkSzaMGjBowasBgMgAAxGYCt4T9picAAAAASUVORK5CYII=", "e": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAwUlEQVR4nGP8//8/AyWAiVQNS1OV/7/pMoLbCjfgTZfR/6Wpyv/RFaPzl97gZNh5+yOmC3be/siw9AYnXBNMMTofHbBgOPEGJwMDkmJ0PjrAGgboinFpxnBBtMZ3uAYYG90gdHGsLsCmGSaO7hq4Ae6q/Didic9wuAFxm38RbQhWA/AZgi6GzMcIA3RD3FX5UcRgfBhghOUFL1sdlFS3yJcNbiCyGIy/7fAVRgYGLAkJ2SXEiMENOIWUvkkBjJRmZwBF6GPD2GUyrAAAAABJRU5ErkJggg==", "f": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAfklEQVR4nMWSSw6AIBBDK4EdCbeYI3D/c8wtSLpjoTs/cURQE2fb4RVop5zzjBfjASDGaIoksddJHnZJwo24WUYuSFmdnoyrmi6f0AV4fPIrgAfQ/IMgBdRrrXmDIAVVE4IUU6+abnqgG8Ta6erBXUr/p/A9YLTWpx5YubegC8bzM0fQJSK5AAAAAElFTkSuQmCC", "g": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA70lEQVR4nKWTMarCQBCGv0iaFJLC4mErBAJeQbAKwTMIVjmCx8gRUronsBKr3GIhV9DCBw9BAnnVjMlqjOgPC8PO/P/+M8x6q8W8WcdXXsHYgGc1xgZ4u2zWfEIWjL4hA4yMDR5IctbxFTfvwttls6Zd3NdrnxOdwTt20ygE4FBd1JkvyWcO0ijkUF00ToozANOfsdapgIjkZc0xmwCQFOdO7JI7AmLP2JsWn37/SIr7A9ulD3Tb9IW82d/UBbFPXtYOEe277cBbLeaNeynIy1rJbcis0ij8fBPFzaDAKxEYWOV38L3A0K4DvX/C2IB/JSR0tGU0dP4AAAAASUVORK5CYII=", "h": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA/UlEQVR4nKWRsW3DMBBFHwXVGUCdpNJdJlAAlamyBKHCbTKD07owuISrlAaUCdKlM6WOA2SBc+FQoShCMeAPsDj+u0fyU4kI9ygHeH59XBj748+MvH15UHHPx/vXFZAaLIuC78MBgE3XsT86SYHy1LDXpuuSNwshSkRQ6loPdX1TIJW1CkBEyFLGLcPJG3hprQXg7XQCYNe2ABhjZo0ikgYAjda6DzeMMSp8YmWtmgEi8ykmDnXdl0Ux1aNzlOezyn9NCc0B+lQeo3Px1l+Io3PTSqmyVvksdm07hZmtmZEa74d1vmJ+xgRjzCIbH2KTOHEBiDX9wj3K/m9Z1wWmTn+3BZ3LtQAAAABJRU5ErkJggg==", "i": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAR0lEQVR4nGNkCG/5zwADYvIQ+tVDBqwAizwLVgkS+CwMYvKYNuLSiEWeBadz8XkFSZ4JRUBMHmErNoBFfjQMRsOAgWFYhAEA93NdPsC+awEAAAAASUVORK5CYII=", "j": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAR0lEQVR4nGNkCG/5zwADYvIQ+tVDBqwAizwLVgkS+CwMYvKYNuLSiEWeBadz8XkFSZ4JRUBMHmErNoBFfjQMRsOAgWFYhAEA93NdPsC+awEAAAAASUVORK5CYII=", "k": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVR4nGNUclX6z0ABYKJE86gBowaMGjCYDAAAeNwBqOM4dFIAAAAASUVORK5CYII=", "l": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAgUlEQVR4nGNckqL0n4ECwITMkeRjY5DkYyPPAEk+Nobnn34xPP/0iyRD4AY8//SLARubaAOW3uBkwMYmBFhgjGiN73CN0RrfMRTCvIjTAFwaYQCXt5iwipIAiDYAVxQTZQC+KCbKAHxRTJQB+KKYBV0xNoAviokyAJtGGKBfNOICACYUMiRX+PLcAAAAAElFTkSuQmCC", "m": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAeklEQVR4nGOsrGz6v2LFfAYGBgaGiIhEBlLZTAwUAooNYJw1a9n/+/fvkKVZUVGFgdHGxfc/JS5gYmBgYHh69wrD07tXGMhhUxwGLORoklbWgbPJcsH1y+cZrl8+T74ByIAsL2jqGsLZZLmAqrFAcUJiFBaXoTwlUgIAuzBBNIC7NMwAAAAASUVORK5CYII=", "n": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA6ElEQVR4nKWSLwrDMBTGv4zpmpygkBNM5whTvcDUZFVhrmpqhaocYb4Q2BGid4JC/aCmojZTKa/5U8r2mYSXvC+/l/eYtRb/6Og259tpV4LqJlsWGXs177VB7KLbl0XGaEx1k0UDBgCHWOLj8rR+zL1MDQMD1U0AgFZKzFpj1jogo8kxAgsAlTFopUQrZbKswMB9iiOojEFlTECQNKCqOV8RxEqJGtD6as5Rc74Q+eebBDGilJY5GISAAqzfcwC4jyP7XPMlRkmYG+VBiGBwqPwO5H0fDBLz1l3y/yCZTKmiJfyqXV3Y0hcX02JuYzOGGQAAAABJRU5ErkJggg==", "o": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAiElEQVR4nGP8//8/AyWACZvg0Sqb/4yMjAzomGgDHrx+TpkLSAEsuCSWpCihBI6CqCQDAwMDhj+wugCqGAXg8hZWA3LWPMblMOIMIAUQbQA2bzEwMDAwYktIhmryWFPX+VsPMQIRZyxcuP0IRbGBqhxWQ3EaICwuQ1QapzgQsYYBKYB+0YgLAADsZh9cuIZNwQAAAABJRU5ErkJggg==", "p": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAwElEQVR4nKWTvQ3CMBBGP0eu6ejwChQgGXYwXXrGYAjGoE+HdwBLUGQFMwELHNVZl19j5XU5+z3JlqOICKfLDpLN1xJG+KyCkt/36xs6J02FOVb9K0/Fqv5CjLEoNAjUdb0sEEJYFiilAgBrbbHIjiIiOOdInl0eI8YIY0xHAoCmaeC9V1oOmP5Fsij3MHowGYmNiUz2EufkFHi+2lxnADsaAI7ntXrc2vScD/vtrMROCsgBAMiYRO5hFFHxf9ThB1t5TNnBpZBpAAAAAElFTkSuQmCC", "q": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAATElEQVR4nGN0tjb+z0ABYKJE8+AwgAWZI8DLQ1DDh89f8Lvg2LkreGl0MPBhMAwMYEROyuREI0o6uPvoGUEDhAX5cBuALkkMGPhABACvgRYuKdKEXwAAAABJRU5ErkJggg==", "r": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABVUlEQVR4nJ2SoU4DQRCGv23QuLo+ABoxJWnSFwBBCLpi1Qk0D4GuWLUCTZqK8gKXNOFGtJYHwOF4gUGws1zvUIy53Zv5//n/mQ1mhkfO2S9h877m7uLBADbv67B7OpzkY4w/ByfIOZuqAiAiAAGoAGCUjzH+EjRNY0AQEVTVyrcCVBURCQCqasfjESBMSncK2ABLKQUHFwApJVdkIhK6rgvVgnv7o2MlGCpya2cD71UigxhaKPU2KeDQm6z1QX0rgMUYnSioKpMCJqVUN+Gd+iEiQVXJOZuvEAhnQ5lO+FcUEuurCv2H5Kt0G/0hen3JhZQSAJNBk9q9N+l6/jgfK6wETdP40dp9x/AdtPuO2ZeMtlNnUNiZfQnLxZx239Huu1q4XMxP6kYEHi/bV+5vr1ku5qMZvGxfuVpNTz37EG8eL+vPt+fPkVSAq9W0+t89HU4J/hvfpZDPUQNhQWIAAAAASUVORK5CYII=", "s": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAoklEQVR4nKVTwQ2EMAxzKubhwRxdAKlrlCG4NU66BToHDxbKPU6gkrrXIvJ0nDSuE1FVPIkBAPwyFYkU4qWzf7+k4KzbrwErtAU1fLCknJAXHbjliKrCL1OR+BcHN60bXI3Qg50TYP8Ur7c+MYWoGGdxraJWYyrhTlxcaL3GONQF5gjLV11gdtYsdjnBjpxCVIbRRbK6e1aZ3kKus0eCPD3nL+zhio+6bawWAAAAAElFTkSuQmCC", "t": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA00lEQVR4nGP8//8/g0+ZEQMyiHz/8T8DFrBckJ8Rmb+l6xwDCyFNuAyGGcZErGZchjGhS/Qc/EOSQRgG7E4RpsyAnbc/UmYAqYCJgYGBwV2Vn2SNMD2M////ZzBUk/+P7Hdkb/Qc/MNQYs+CoomBgYHBdc5bhvO3HjKyIAvAAGpAfoRrRFYDAywYIlgMw6YRBggGIj7NcAMef/pHyBwMANPDwsDAwGARJ8p4YtFreHKW5cPuMGSLLOJEGeEGIAswMDAwIBuGDJDVwADj//8k5yMUAAD/mVCRC+Qw/wAAAABJRU5ErkJggg==", "u": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAsElEQVR4nGP8//8/AyWAiSLd1DCABZkzb948ZC663xhhjKSkJOwGIGssq6pHEexqa4QZyIgsjtUL6Jof3LmOIYbLgP/YNKMZguI1goGooKKJQhNyAV5DiDYgJMCbKDEGBsxYYOxqa/wfFhaGobCnp4fBzMyMgQEtFrBFI8OqVasYenp6MMSIcQFDcnJyI5RZj0187ty5qE5Gz0yMjIwNWK2Cgv///6PIYxhAKqA4MwEAvBs52hUVuGgAAAAASUVORK5CYII=", "v": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAe0lEQVR4nM2Tyw2AMAxDXcQkzWoMUgbJjbXaJTqAuRSJQqX+DmAplyh+sSLFkMSMlin3LwAgmVVNMUbe57sSqCoBmKEEx2aZEuTzLYDLXFxYA9zN3YCnuQkQRBhEmA72UhNAVRlExgAA3JUCgKsB1tIW6/1e6pdkPv/GEypz51juQwp7AAAAAElFTkSuQmCC", "w": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAfklEQVR4nMWSSw6AIBBDK4EdCbeYI3D/c8wtSLpjoTs/cURQE2fb4RVop5zzjBfjASDGaIoksddJHnZJwo24WUYuSFmdnoyrmi6f0AV4fPIrgAfQ/IMgBdRrrXmDIAVVE4IUU6+abnqgG8Ta6erBXUr/p/A9YLTWpx5YubegC8bzM0fQJSK5AAAAAElFTkSuQmCC", "x": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAsklEQVR4nMVTsQ3DIBC8j9JTeQEsBsgULJESz+A2bXZIiYdgCg+AlAVSIdF/qlhAwHLkRDmJ6v7v708PMTP24LCr++sCRIRp6DnGWH3T0DMRZQKUZvAirZGslcgKnQ843+4EAGnP2wqP66mZao2rZqCVgPMhm146WhX4BMcWoZVAN84ErK+VObBGcmq9hPMB1shMrLqC82GZDgDdOFNL+HcZALhsESgPaVMTMy919Pff+AR5+1b26pN7fQAAAABJRU5ErkJggg==", "y": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAR0lEQVR4nGNkCG/5zwADYvIQ+tVDBqwAizwLVgkS+CwMYvKYNuLSiEWeBadz8XkFSZ4JRUBMHmErNoBFfjQMRsOAgWFYhAEA93NdPsC+awEAAAAASUVORK5CYII=", "z": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPklEQVR4nGPU1DH4z0ABYGFgYGBg4v+HVfLfRyYGQvJMlNjOwMAwagADNBZgoY0L4JOnjgtG08EAG0BxOgAAcdAVcK3hi3wAAAAASUVORK5CYII=", "A": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAiElEQVR4nGP8//8/AyWACZvg0Sqb/4yMjAzomGgDHrx+TpkLSAEsuCSWpCihBI6CqCQDAwMDhj+wugCqGAXg8hZWA3LWPMblMOIMIAUQbQA2bzEwMDAwYktIhmryWFPX+VsPMQIRZyxcuP0IRbGBqhxWQ3EaICwuQ1QapzgQsYYBKYB+0YgLAADsZh9cuIZNwQAAAABJRU5ErkJggg==", "B": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAnElEQVR4nGO0jlH/z0AkSHIsY2BgYGCYt78LLsZErGZcgIUUm1tXtDIwMDAwVEdUw11ClAEwICnOiiHGSEwYPH/5G8VmmEskxVmJcwG6zch8olyA7hJkAygOA5RoTHIsg4c4sYA66QBfPBNlAAxg8yM6EJDkYvjw/Bucz2gdo/4fXzwjg+cvf2OIsWBTiMslBFMitngmBEgOA3QAAGr9M+z5BRbuAAAAAElFTkSuQmCC", "C": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAZElEQVR4nGP0tNH+H63xnYEcsPQGJwPjkhSl/2TphgImSjQPVwPcVfkZ3FX5MRRiE2NgYGBgQZfcefsjVg07b3/EKsYoIy6MEo0dvhBFFZs/MqCLo4sxMDBgGkAqGISxMAINAAD+WxnyRb75OgAAAABJRU5ErkJggg==", "D": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAfUlEQVR4nGP08vL6Lysry0AOePz4MQMTuZoZGBgYZGVlGZjI1g0FI8EAMzMzvPIshBSdOnUKp/ypU6cYGIXFZf6LiYrgNMDO2pzh0NGTWOVevX4DMQCfE8VERRhevX6DU37gY4GFgQHiTHwAl/yr128gBiD7kZCf0eUHPgwANAYj26KtzvIAAAAASUVORK5CYII=", "E": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAfUlEQVR4nGP08vL6Lysry0AOePz4MQMTuZoZGBgYZGVlGZjI1g0FI8EAMzMzvPIshBSdOnUKp/ypU6cYGIXFZf6LiYrgNMDO2pzh0NGTWOVevX4DMQCfE8VERRhevX6DU37gY4GFgQHiTHwAl/yr128gBiD7kZCf0eUHPgwANAYj26KtzvIAAAAASUVORK5CYII=", "F": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAR0lEQVR4nGNkCG/5zwADYvIQ+tVDBqwAizwLVgkS+CwMYvKYNuLSiEWeBadz8XkFSZ4JRUBMHmErNoBFfjQMRsOAgWFYhAEA93NdPsC+awEAAAAASUVORK5CYII=", "G": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA3klEQVR4nK2SMQrCMBiFv4jg1q1DB1EQ3J0VPIiDkzdw8gBO3sDJwYMIOhccxYLi4NCtW0GMg/6xsTUV7JsS8t6X5CVKaw3AbjbQp/gKwGgZKQq0nnQ0QNsP6M+3CkAJoNdtaTFOh3UZqtEyMsHF5mZg4eFcDBgnKSuvYYEkmF0TgNlKtE9TxgmvICYoa9Cw/DnA24gBybxIhYBPkEu1UkeJzAnehXnOQOaFbIBICvthT6CCK1TXQdsPAIg5OgPiE+V+Yi9OnIDQf5b89SeK4VflAJfk7gw0Pbu2v0t8AM1QVaFQ78K0AAAAAElFTkSuQmCC", "H": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAgUlEQVR4nGP8//8/w9JU5f8MZIDo2XcZmRgYGBgURCVJ1gzTw/j//38GQzV5slxw/tZDiAsYGBgYRFL+MMR/+slg7uTJcMEojSAfBpiwGk0CGHgDqBeIF4zSGMydPBniP/1kEEn5Q5BPNS8MvAEUByILAwMDw+NP/8h2AXW8QAkAABndRe4cZLaVAAAAAElFTkSuQmCC", "I": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAwElEQVR4nKWTvQ3CMBBGP0eu6ejwChQgGXYwXXrGYAjGoE+HdwBLUGQFMwELHNVZl19j5XU5+z3JlqOICKfLDpLN1xJG+KyCkt/36xs6J02FOVb9K0/Fqv5CjLEoNAjUdb0sEEJYFiilAgBrbbHIjiIiOOdInl0eI8YIY0xHAoCmaeC9V1oOmP5Fsij3MHowGYmNiUz2EufkFHi+2lxnADsaAI7ntXrc2vScD/vtrMROCsgBAMiYRO5hFFHxf9ThB1t5TNnBpZBpAAAAAElFTkSuQmCC", "J": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAuElEQVR4nGP0LjVkgIHJ6z79Z0ACvGl8DAwMDAyfZ31CFmbIDeJjhLFZsGkkBGDqc4P4GBnvKSvDNW/88oUoA/x5eOBsFlI0olvkz8PDwNgvLk6S89EBEz7JFgZWhhYGVrwGsODSyMDAwFDD8BsrH68BLQyscIUxRVIQwb5nGHIwgDMMkEOagQF3QGOEAUwjsgbkUCfohY1fvmAYgs1QnAYQqxGvAegG4QN40wExgGIDGIXFZShKygCnikP//MZdAwAAAABJRU5ErkJggg==", "K": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA00lEQVR4nK2TMRYBMRCGv/G06wIuoA09B1DR71ZbryPgCNQqeqo9AL1N6wIuYA8QjfUSm+BZU00m838v/yQRYwxNotVI/Q9A2170dyVFHFW5462II/kIsIU6X7t1MuMD1QC2uKv3AFzOR6J0hRpntd7XGRifGKDczND5umbt4xB7gxEAUbry7gcBVzV95iFxEFB5varpE+TzDyD2SxQR1PZmThNheHBfaFXTScfReG9heDCcJlKrfXUCYAGgtre53aiTzvKRLhxNCPAmwoBfovFnugPf9lpOdvHMKwAAAABJRU5ErkJggg==", "L": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABVUlEQVR4nJ2SoU4DQRCGv23QuLo+ABoxJWnSFwBBCLpi1Qk0D4GuWLUCTZqK8gKXNOFGtJYHwOF4gUGws1zvUIy53Zv5//n/mQ1mhkfO2S9h877m7uLBADbv67B7OpzkY4w/ByfIOZuqAiAiAAGoAGCUjzH+EjRNY0AQEVTVyrcCVBURCQCqasfjESBMSncK2ABLKQUHFwApJVdkIhK6rgvVgnv7o2MlGCpya2cD71UigxhaKPU2KeDQm6z1QX0rgMUYnSioKpMCJqVUN+Gd+iEiQVXJOZuvEAhnQ5lO+FcUEuurCv2H5Kt0G/0hen3JhZQSAJNBk9q9N+l6/jgfK6wETdP40dp9x/AdtPuO2ZeMtlNnUNiZfQnLxZx239Huu1q4XMxP6kYEHi/bV+5vr1ku5qMZvGxfuVpNTz37EG8eL+vPt+fPkVSAq9W0+t89HU4J/hvfpZDPUQNhQWIAAAAASUVORK5CYII=", "M": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA00lEQVR4nGP8//8/g0+ZEQMyiHz/8T8DFrBckJ8Rmb+l6xwDCyFNuAyGGcZErGZchjGhS/Qc/EOSQRgG7E4RpsyAnbc/UmYAqYCJgYGBwV2Vn2SNMD2M////ZzBUk/+P7Hdkb/Qc/MNQYs+CoomBgYHBdc5bhvO3HjKyIAvAAGpAfoRrRFYDAywYIlgMw6YRBggGIj7NcAMef/pHyBwMANPDwsDAwGARJ8p4YtFreHKW5cPuMGSLLOJEGeEGIAswMDAwIBuGDJDVwADj//8k5yMUAAD/mVCRC+Qw/wAAAABJRU5ErkJggg==", "N": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAdUlEQVR4nMXSMQ5AUBAE0PHzGxGVQmOOIuIM24k4nIjD/GvMQajR+LYw5Wb3ZYspmrY74EjwHANAUVb1vx+4gbjM02WwbnsecB+MQw+Sr8EHkAtGSZeFXDCQhKTXwD1BEszsO2BmSCl9BzzHgLNIknwASX+VTyVvHveQFcR8AAAAAElFTkSuQmCC", "O": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAb0lEQVR4nGPU1DH4z0ABYELmKMpJkWwAC7Km+4+ekWwIxS5gIqwEP2DBJXH/0TMUPi7X4XXBuW3WDOe2WeN1AcVeGHgDcAYiAwMDg5HXUfINmFceiMJvXn4SqzpGLy8v6uUFuhiAnsAYhcVlKPICAK+AFpYeq5AqAAAAAElFTkSuQmCC", "P": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA6ElEQVR4nKWSLwrDMBTGv4zpmpygkBNM5whTvcDUZFVhrmpqhaocYb4Q2BGid4JC/aCmojZTKa/5U8r2mYSXvC+/l/eYtRb/6Og259tpV4LqJlsWGXs177VB7KLbl0XGaEx1k0UDBgCHWOLj8rR+zL1MDQMD1U0AgFZKzFpj1jogo8kxAgsAlTFopUQrZbKswMB9iiOojEFlTECQNKCqOV8RxEqJGtD6as5Rc74Q+eebBDGilJY5GISAAqzfcwC4jyP7XPMlRkmYG+VBiGBwqPwO5H0fDBLz1l3y/yCZTKmiJfyqXV3Y0hcX02JuYzOGGQAAAABJRU5ErkJggg==", "Q": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAZElEQVR4nGP0tNH+H63xnYEcsPQGJwPjkhSl/2TphgImSjQPVwPcVfkZ3FX5MRRiE2NgYGBgQZfcefsjVg07b3/EKsYoIy6MEo0dvhBFFZs/MqCLo4sxMDBgGkAqGISxMAINAAD+WxnyRb75OgAAAABJRU5ErkJggg==", "R": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA00lEQVR4nGP8//8/g0+ZEQMyiHz/8T8DFrBckJ8Rmb+l6xwDCyFNuAyGGcZErGZchjGhS/Qc/EOSQRgG7E4RpsyAnbc/UmYAqYCJgYGBwV2Vn2SNMD2M////ZzBUk/+P7Hdkb/Qc/MNQYs+CoomBgYHBdc5bhvO3HjKyIAvAAGpAfoRrRFYDAywYIlgMw6YRBggGIj7NcAMef/pHyBwMANPDwsDAwGARJ8p4YtFreHKW5cPuMGSLLOJEGeEGIAswMDAwIBuGDJDVwADj//8k5yMUAAD/mVCRC+Qw/wAAAABJRU5ErkJggg==", "S": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAYElEQVR4nGM0UJX7z0ABYGFgYGCQZfhHtIbHDExw9Y8ZmBiYYAxigTXLLxQ+E6kuePSHBdMASsCoARQYAIt6sg2ARf0gCwM5lj8kGwBPl48ZmBgY0JIp0QbAQpSUTAUDAFzmEYCFEV8sAAAAAElFTkSuQmCC", "T": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR4nGPU1DH4z87Fy/Dz22cGGCCFz8TOxQsXJIdmgplELs2EzIEBUvhMyBIwZ5HCHyRhQIxfcfGZyPU7DAySMBhNB8T5FRcfANyvnSw0CYiQAAAAAElFTkSuQmCC", "U": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABVUlEQVR4nJ2SoU4DQRCGv23QuLo+ABoxJWnSFwBBCLpi1Qk0D4GuWLUCTZqK8gKXNOFGtJYHwOF4gUGws1zvUIy53Zv5//n/mQ1mhkfO2S9h877m7uLBADbv67B7OpzkY4w/ByfIOZuqAiAiAAGoAGCUjzH+EjRNY0AQEVTVyrcCVBURCQCqasfjESBMSncK2ABLKQUHFwApJVdkIhK6rgvVgnv7o2MlGCpya2cD71UigxhaKPU2KeDQm6z1QX0rgMUYnSioKpMCJqVUN+Gd+iEiQVXJOZuvEAhnQ5lO+FcUEuurCv2H5Kt0G/0hen3JhZQSAJNBk9q9N+l6/jgfK6wETdP40dp9x/AdtPuO2ZeMtlNnUNiZfQnLxZx239Huu1q4XMxP6kYEHi/bV+5vr1ku5qMZvGxfuVpNTz37EG8eL+vPt+fPkVSAq9W0+t89HU4J/hvfpZDPUQNhQWIAAAAASUVORK5CYII=", "V": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAwUlEQVR4nGP8//8/AyWAiVQNS1OV/7/pMoLbCjfgTZfR/6Wpyv/RFaPzl97gZNh5+yOmC3be/siw9AYnXBNMMTofHbBgOPEGJwMDkmJ0PjrAGgboinFpxnBBtMZ3uAYYG90gdHGsLsCmGSaO7hq4Ae6q/Didic9wuAFxm38RbQhWA/AZgi6GzMcIA3RD3FX5UcRgfBhghOUFL1sdlFS3yJcNbiCyGIy/7fAVRgYGLAkJ2SXEiMENOIWUvkkBjJRmZwBF6GPD2GUyrAAAAABJRU5ErkJggg==", "W": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAf0lEQVR4nGNckqLEQAo4zOz6H5nPQoqGx48fM8jKospjGEBIAzpgIVUDOmAiTTkWAx4/fky25sePHzMwyZLqZiTNsrKy5HshODgY4gJyDTh16hRDcHAwZYF46tQpymOBYEpEB2s2bCXNAHQNBF1ASAM6YBQWl/lPWBluQHEgAgA6OiuelL2eNAAAAABJRU5ErkJggg==", "X": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAYUlEQVR4nGP8//8/AzLwstX5z8DAwBCt8Z0BHSy9wcnAwMDAsO3wFUaYGBOGKjTFuPgwwIIuwGTJxvjv+K//uDQxWbIxIvMxDEBWBDMIm0YYYEQPA1IBzjAYNWDUgKFlAACnzxoztqYvHAAAAABJRU5ErkJggg==", "Y": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAwElEQVR4nK1Suw3DIBB9IA9wYoFIqdKyChtEyQaex11qVqFNmwUiJjCpLrocZ0GRV5mD97POPe7nVnIF43k74bK9MIOYCF4PZ8kMX3JFTISYqFO3vvkcE6HkCscV+JGsM5rFRHBrCE07SMHRzHMU6aJdrTsWXCxl3ZtNrBpuDaFpwgxY0EsHHfWIKFP/J4FUlpcWQSf9JrBg7YFGt8pMsjbRqmkmOPofVpLFIvLD0RkA3JWoBd81+VkevUiM977jA/JmhcqVLG8YAAAAAElFTkSuQmCC", "Z": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABOElEQVR4nH2TvUoDQRSFv1lSpZCAVUIiWGy1BI1PYDpBEdb3sNSHMGXeYwPBQDrzBK4hpEohmCVWAdnC9lpkZ72zPznVzJ17vjkzO2tEBGMMWrdPAwE4HRzq+1gAmI1ip1FEMBpQZ6wDOQBtrjPqtdkoNiJCQ0eyDccSaAhwSHD3fCUaNI5SHh9OSqCiXl/ejVcsjqOU806HcZSyj8UxW6CWB/Dz/ZsXQj/gc7cj9INSs4ZZjwfQajdJVj0Auv0toR/Q7W9LyaySVY9WuwlwuMRk1aPb3zoQWweYbNbZsXY53K41NLVotPOQgMlmXTID/+/g4uY+P2AVSJsAlvOpERGcr6CN2qDHxbtxnrJOUZVE7w4V/wJwnYHeqNByPh1mw8VRAMClf+ZAPjZfQzWtBZRABS30RET4AwX0x5WK10PGAAAAAElFTkSuQmCC"}, "legend": {"@": "young man with soot-stained hands, dark tousled hair, wearing a leather blacksmith apron over a brown tunic", "#": "wraith-like sorcerer in cracked black iron armor, smoke seeping from the joints, glowing red eyes, no visible face", "$": "Grandmother (Former Keeper)", "%": "Ash-Wolf", "&": "Stone Golem", "*": "Keeper-Scout", "a": "Grass", "b": "Dirt Path", "c": "Cobblestone", "d": "Cliff Edge", "e": "Rocky Outcrop", "f": "Stone Floor", "g": "Cave Floor", "h": "Ash/Soot Ground", "i": "Shallow Water", "j": "Deep Water", "k": "Mud/Swamp", "l": "Quicksand", "m": "Chasm Edge", "n": "Bone Bridge Plank", "o": "Wooden Plank", "p": "Stepping Stone", "q": "Rubble/Debris", "r": "Staircase", "s": "Magma", "t": "Obsidian Rock", "u": "Crystal Formation", "v": "Narrow Ledge", "w": "Scorched Stone Floor", "x": "Ash-Covered Platform", "y": "Molten Moat Border", "z": "Loose Scree", "A": "Wooden Cottage", "B": "Blacksmith Forge", "C": "Village Well", "D": "Wooden Fence", "E": "Stone Wall", "F": "Watchtower", "G": "Wooden Bridge", "H": "Bookshelf", "I": "Stone Pillar", "J": "Archive Door", "K": "Reading Pedestal", "L": "Broken Statue", "M": "Cage/Prison Cell", "N": "Forge Station", "O": "Watchflame Pedestal", "P": "Bone Pillar", "Q": "Rib-Cage Archway", "R": "Iron Throne", "S": "Rune Circle Floor", "T": "Support Pillar", "U": "Sunken Statue", "V": "Broken Pillar", "W": "Chest/Loot Container", "X": "Torch", "Y": "Signpost", "Z": "Tree"}, "walkables": ["a", "b", "c", "e", "f", "g", "h", "i", "k", "n", "o", "p", "q", "r", "t", "v", "w", "x", "z", "G", "S"], "objects": ["$", "%", "&", "*", "C", "H", "J", "K", "L", "M", "N", "O", "R", "U", "W", "X", "Y"], "defaultWalkable": "n", "playerStart": [7, 1], "enemyStart": [14, 17]};
+
+const TILE = 16, VIEW_W = 20, VIEW_H = 16;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let scale = 2;
+
+function fitCanvas() {
+  const stage = document.getElementById('stage');
+  const maxW = stage.clientWidth - 12, maxH = stage.clientHeight - 12;
+  scale = Math.max(1, Math.floor(Math.min(maxW / (VIEW_W * TILE), maxH / (VIEW_H * TILE))));
+  canvas.width = VIEW_W * TILE * scale;
+  canvas.height = VIEW_H * TILE * scale;
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', () => { fitCanvas(); draw(); });
+
+// --- world state ---
+const grid = GAME.grid.map(r => r.split(''));
+const base = GAME.gridBase.map(r => r.split(''));
+const H = grid.length, W = grid[0].length;
+const walkables = new Set(GAME.walkables);
+const objects = new Set(GAME.objects);
+
+const sprites = {};
+let pending = 0;
+for (const [ch, uri] of Object.entries(GAME.tiles)) {
+  pending++;
+  const img = new Image();
+  img.onload = () => { if (--pending === 0) draw(); };
+  img.src = uri;
+  sprites[ch] = img;
+}
+
+// playerStart/enemyStart are (x, y) as returned by solvers.find_characters
+const player = { x: GAME.playerStart[0], y: GAME.playerStart[1], face: [0, 1], alive: true };
+const enemy = { x: GAME.enemyStart[0], y: GAME.enemyStart[1], dir: 1, alive: GAME.enemyStart[1] >= 0 };
+const enemyHome = enemy.x;
+grid[player.y][player.x] = GAME.defaultWalkable;
+if (enemy.alive) grid[enemy.y][enemy.x] = GAME.defaultWalkable;
+
+let bullets = [], enemyBullets = [];
+let score = 0, picked = {}, totalObjects = 0, gameOver = false, started = false;
+for (const row of grid) for (const t of row) if (objects.has(t)) totalObjects++;
+
+const objectives = GAME.objectives.map(o => ({...o, done: false}));
+
+// --- helpers ---
+const cam = { x: 0, y: 0 };
+function updateCamera() {
+  cam.x = Math.max(0, Math.min(player.x - (VIEW_W >> 1), W - VIEW_W));
+  cam.y = Math.max(0, Math.min(player.y - (VIEW_H >> 1), H - VIEW_H));
+}
+function walkable(x, y) {
+  return x >= 0 && y >= 0 && x < W && y < H &&
+    (walkables.has(grid[y][x]) || objects.has(grid[y][x]));
+}
+function showMsg(text, ms) {
+  const el = document.getElementById('msg');
+  el.textContent = text; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), ms || 2200);
+}
+// Collapsed by default on touch screens, where the drawer would cover the map
+let questsOpen = !window.matchMedia('(pointer: coarse)').matches;
+function renderQuests() {
+  const box = document.getElementById('quests');
+  if (!objectives.length) { box.innerHTML = ''; return; }
+  if (!box.querySelector('details')) {
+    box.innerHTML = '<details' + (questsOpen ? ' open' : '') + '><summary></summary><ul></ul></details>';
+    box.querySelector('details').addEventListener('toggle', e => { questsOpen = e.target.open; });
+  }
+  const doneCount = objectives.filter(o => o.done).length;
+  box.querySelector('summary').textContent = 'Objectives ' + doneCount + '/' + objectives.length;
+  box.querySelector('ul').innerHTML =
+    objectives.map(o => '<li class="' + (o.done ? 'done' : '') + '">' + o.name + '</li>').join('');
+}
+function checkObjectives() {
+  for (const o of objectives) {
+    if (o.done) continue;
+    if (o.row !== null && Math.abs(o.row - player.y) <= 1 && Math.abs(o.col - player.x) <= 1) {
+      o.done = true; score += 100; showMsg('Objective complete: ' + o.name);
+    } else if (o.tile && picked[o.tile]) {
+      o.done = true; score += 100; showMsg('Objective complete: ' + o.name);
+    }
+  }
+  renderQuests();
+  if (!gameOver && objectives.length && objectives.every(o => o.done)) {
+    endGame(true, 'Every objective is fulfilled. The story is complete.');
+  }
+}
+function endGame(won, text) {
+  gameOver = true;
+  document.getElementById('endTitle').textContent = won ? 'Quest Complete' : 'You Have Fallen';
+  document.getElementById('endText').textContent = text + ' Final score: ' + score;
+  document.getElementById('end').style.display = 'flex';
+}
+
+// --- actions ---
+function movePlayer(dx, dy) {
+  if (!started || gameOver) return;
+  player.face = [dx, dy];
+  const nx = player.x + dx, ny = player.y + dy;
+  if (!walkable(nx, ny)) return;
+  player.x = nx; player.y = ny;
+  const t = grid[ny][nx];
+  if (objects.has(t)) {
+    grid[ny][nx] = GAME.defaultWalkable;
+    picked[t] = (picked[t] || 0) + 1;
+    score += 25;
+    const desc = GAME.legend[t] || 'an item';
+    showMsg('Picked up: ' + desc);
+    renderInventory();
+  }
+  updateCamera();
+  checkObjectives();
+}
+function renderInventory() {
+  let count = 0;
+  const inv = document.getElementById('inventory');
+  inv.innerHTML = '';
+  for (const [t, n] of Object.entries(picked)) {
+    count += n;
+    if (GAME.tiles[t]) {
+      const img = document.createElement('img');
+      img.src = GAME.tiles[t]; img.title = GAME.legend[t] || t;
+      inv.appendChild(img);
+    }
+  }
+  document.getElementById('itemCount').textContent = count;
+  document.getElementById('score').textContent = score;
+}
+function shoot() {
+  if (!started || gameOver) return;
+  bullets.push({ x: player.x, y: player.y, dx: player.face[0], dy: player.face[1] });
+}
+function strike() {
+  if (!started || gameOver || !enemy.alive) return;
+  if (Math.abs(player.x - enemy.x) + Math.abs(player.y - enemy.y) === 1) defeatEnemy('struck down');
+}
+function defeatEnemy(how) {
+  enemy.alive = false; score += 250;
+  showMsg('The antagonist is ' + how + '!');
+  for (const o of objectives) {
+    if (!o.done && /defeat|antagonist|villain|destroy|confront|stop/i.test(o.name)) {
+      o.done = true; score += 100;
+    }
+  }
+  renderQuests(); renderInventory();
+  if (!objectives.length) endGame(true, 'The antagonist is defeated.');
+  else checkObjectives();
+}
+
+// --- enemy AI (mirrors play_game.py) ---
+function tickEnemy() {
+  if (!enemy.alive || gameOver || !started) return;
+  const sees = (Math.abs(player.x - enemy.x) <= 3 && player.y === enemy.y) ||
+               (Math.abs(player.y - enemy.y) <= 3 && player.x === enemy.x);
+  if (sees) {
+    const dx = Math.sign(player.x - enemy.x), dy = dx === 0 ? Math.sign(player.y - enemy.y) : 0;
+    enemyBullets.push({ x: enemy.x, y: enemy.y, dx, dy });
+  } else {
+    const nx = enemy.x + enemy.dir;
+    if (Math.abs(nx - enemyHome) > 5 || !walkable(nx, enemy.y)) enemy.dir *= -1;
+    else enemy.x = nx;
+  }
+}
+function tickBullets() {
+  for (const b of bullets) { b.x += b.dx; b.y += b.dy; }
+  for (const b of enemyBullets) { b.x += b.dx; b.y += b.dy; }
+  bullets = bullets.filter(b => {
+    if (enemy.alive && b.x === enemy.x && b.y === enemy.y) { defeatEnemy('shot down'); return false; }
+    return walkable(b.x, b.y);
+  });
+  enemyBullets = enemyBullets.filter(b => {
+    if (b.x === player.x && b.y === player.y) {
+      endGame(false, 'The antagonist’s attack found its mark.');
+      return false;
+    }
+    return walkable(b.x, b.y);
+  });
+}
+
+// --- rendering ---
+function drawTile(ch, x, y) {
+  const img = sprites[ch];
+  if (img && img.complete) {
+    ctx.drawImage(img, (x - cam.x) * TILE * scale, (y - cam.y) * TILE * scale, TILE * scale, TILE * scale);
+  } else {
+    ctx.fillStyle = '#f0f';
+    ctx.fillRect((x - cam.x) * TILE * scale, (y - cam.y) * TILE * scale, TILE * scale, TILE * scale);
+  }
+}
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (let y = cam.y; y < Math.min(cam.y + VIEW_H, H); y++) {
+    for (let x = cam.x; x < Math.min(cam.x + VIEW_W, W); x++) {
+      drawTile(GAME.defaultWalkable, x, y);          // floor fill
+      const b = base[y] && base[y][x];
+      if (b && b !== '@' && b !== '#') drawTile(b, x, y);   // terrain layer
+      const t = grid[y][x];
+      if (t !== b && t !== '@' && t !== '#') drawTile(t, x, y); // object layer
+    }
+  }
+  if (enemy.alive) drawTile('#', enemy.x, enemy.y);
+  drawTile('@', player.x, player.y);
+  ctx.fillStyle = '#ffdd66';
+  for (const b of bullets) {
+    ctx.beginPath();
+    ctx.arc((b.x - cam.x + .5) * TILE * scale, (b.y - cam.y + .5) * TILE * scale, 3 * scale, 0, 7);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ff5555';
+  for (const b of enemyBullets) {
+    ctx.beginPath();
+    ctx.arc((b.x - cam.x + .5) * TILE * scale, (b.y - cam.y + .5) * TILE * scale, 3 * scale, 0, 7);
+    ctx.fill();
+  }
+}
+
+// --- input ---
+const keyDirs = {
+  ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
+  w: [0,-1], s: [0,1], a: [-1,0], d: [1,0],
+  W: [0,-1], S: [0,1], A: [-1,0], D: [1,0],
+};
+let held = null;
+function press(dir) {
+  // Move immediately so quick taps register; the main loop repeats while held.
+  if (held !== dir) { held = dir; movePlayer(dir[0], dir[1]); }
+}
+document.addEventListener('keydown', e => {
+  if (keyDirs[e.key]) { press(keyDirs[e.key]); e.preventDefault(); }
+  else if (e.key === 'z' || e.key === 'Z') shoot();
+  else if (e.key === ' ') { strike(); e.preventDefault(); }
+});
+document.addEventListener('keyup', e => {
+  if (keyDirs[e.key] && held === keyDirs[e.key]) held = null;
+});
+const touchDirs = { up: [0,-1], down: [0,1], left: [-1,0], right: [1,0] };
+for (const btn of document.querySelectorAll('#touch .pad button')) {
+  const dir = touchDirs[btn.dataset.dir];
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); press(dir); });
+  btn.addEventListener('pointerup', () => { if (held === dir) held = null; });
+  btn.addEventListener('pointercancel', () => { if (held === dir) held = null; });
+}
+for (const btn of document.querySelectorAll('#touch .actions button')) {
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (btn.dataset.act === 'shoot') shoot(); else strike();
+  });
+}
+
+// --- main loop: 10 ticks/sec like play_game.py ---
+setInterval(() => {
+  if (held) movePlayer(held[0], held[1]);
+  tickEnemy();
+  tickBullets();
+  renderInventory();
+  draw();
+}, 100);
+
+// --- boot ---
+document.getElementById('storyText').textContent = GAME.story.trim();
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('story').style.display = 'none';
+  started = true;
+  showMsg('Find the objectives. Beware the antagonist.', 3000);
+});
+renderQuests();
+updateCamera();
+fitCanvas();
+draw();
+</script>
+</body>
+</html>
