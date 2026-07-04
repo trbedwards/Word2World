@@ -73,6 +73,29 @@ To play an example world:
 python word2world/play_game.py
 ```
 
+### Browser demo (no install needed):
+
+Any generated game can also be packaged as a single self-contained HTML file
+that runs in any browser — desktop or phone — with no server and no
+dependencies. All sprites are embedded as base64 data URIs:
+
+```
+python word2world/web_player.py "path_to_game_data/game_data.json" -o my_world.html
+```
+
+Or build one from the bundled example world:
+
+```
+python word2world/web_player.py
+```
+
+A pre-built demo generated end-to-end with Claude (story, tiles, world layout
+and objectives all produced by `--model=claude`) lives at
+[`demo/claude_demo_web_player.html`](demo/claude_demo_web_player.html) —
+download it and open it in a browser to play. Arrow keys / WASD to move, walk
+into items to collect them, `Z` shoots, `SPACE` strikes adjacent enemies, and
+touch controls appear automatically on phones.
+
 ### Results:
 
 #### LLM comparison:

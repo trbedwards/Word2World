@@ -10,10 +10,15 @@ import re
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 from typing import Dict, Tuple
-from transformers import BertTokenizer, BertModel
-from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, AutoModel
-import torch
-from scipy.spatial.distance import cosine
+try:
+    from transformers import BertTokenizer, BertModel
+    from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, AutoModel
+    import torch
+    from scipy.spatial.distance import cosine
+    BERT_AVAILABLE = True
+except ImportError:
+    BERT_AVAILABLE = False
+import difflib
 import traceback
 
 def load_image_dict(char_tile_mapping, folder_path):
@@ -449,8 +454,14 @@ def bert_similarity(desc1: str, desc2: str) -> float:
     #tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     #model = BertModel.from_pretrained('bert-base-uncased')
 
-    tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
-    model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    if not BERT_AVAILABLE:
+        return lexical_batch_similarity([desc1], [desc2])[0]
+
+    try:
+        tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    except Exception:
+        return lexical_batch_similarity([desc1], [desc2])[0]
     
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -466,9 +477,25 @@ def bert_similarity(desc1: str, desc2: str) -> float:
     print(f"Similarity between {desc1} and {desc2} is {similarity}")
     return similarity
 
+def lexical_batch_similarity(descs1, descs2):
+    """
+    Fallback similarity when BERT/torch is unavailable: combines word overlap
+    (Jaccard) with a character-level ratio so close descriptions still match.
+    """
+    similarities = []
+    for desc1, desc2 in zip(descs1, descs2):
+        words1 = set(desc1.lower().split())
+        words2 = set(desc2.lower().split())
+        overlap = len(words1 & words2) / max(1, len(words1 | words2))
+        ratio = difflib.SequenceMatcher(None, desc1.lower(), desc2.lower()).ratio()
+        similarities.append(0.7 * overlap + 0.3 * ratio)
+    return similarities
+
 def bert_batch_similarity(descs1, descs2):
     """
     Calculate similarities for batches of descriptions using DistilBERT embeddings and cosine similarity.
+    Falls back to a lexical similarity when transformers/torch are unavailable
+    or the model weights cannot be downloaded.
 
     Parameters:
     descs1 (List[str]): First list of descriptions.
@@ -478,11 +505,17 @@ def bert_batch_similarity(descs1, descs2):
     List[float]: List of cosine similarity scores.
     """
 
+    if not BERT_AVAILABLE:
+        return lexical_batch_similarity(descs1, descs2)
+
     #tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
     #model = AutoModel.from_pretrained('bert-base-uncased')
 
-    tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
-    model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    try:
+        tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    except Exception:
+        return lexical_batch_similarity(descs1, descs2)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)

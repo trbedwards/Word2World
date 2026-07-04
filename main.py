@@ -19,7 +19,10 @@ def main():
     args = parser.parse_args()
 
     if args.model:
+        # Set on the class as well: generators create their own Config()
+        # instances, which would otherwise miss instance-level overrides.
         config.model = args.model
+        Config.model = args.model
     if args.min_story_paragraphs and args.max_story_paragraphs:
         if (args.min_story_paragraphs > args.max_story_paragraphs):
             raise ValueError("Minimum number of paragraphs should be less than maximum number of paragraphs.") 
@@ -32,8 +35,10 @@ def main():
         config.rounds = int(args.rounds)
     if args.experiment_name:
         config.experiment_name = args.experiment_name
+        Config.experiment_name = args.experiment_name
     if args.save_dir:
         config.save_dir = args.save_dir
+        Config.save_dir = args.save_dir
     
     world = Word2World()
     world.run(config)

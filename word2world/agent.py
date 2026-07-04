@@ -11,7 +11,13 @@ from .solvers import find_characters
 import imageio
 from .fixers import pad_rows_to_max_length
 from PIL import Image, ImageDraw, ImageFont
-from rembg import remove
+try:
+    from rembg import remove
+except ImportError:
+    def remove(image):
+        # rembg unavailable: sprites in word2world/data already ship with
+        # alpha channels, so background removal is a no-op fallback.
+        return image
 
 class Word2WorldEnv(gym.Env):
     def __init__(self, walkable_tiles,tiles_without_char,  tiles, str_map_without_chars, str_map, interactive_object_tiles, enemy_tiles):
